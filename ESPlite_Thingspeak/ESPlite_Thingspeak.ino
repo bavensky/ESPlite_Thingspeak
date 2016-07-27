@@ -9,35 +9,36 @@
 ESPert espert;
 
 #ifndef WIFI_SSID
-#define WIFI_SSID       "ESPERT-3020"   //   แก้ไข ssid 
-#define WIFI_PASSPHRASE "espertap"
+#define WIFI_SSID       "Your_wifi_SSID"        //  แก้ไข ssid ที่จะทำการเชื่อมต่อ
+#define WIFI_PASSPHRASE "Your_wifi_password"    //  แก้ไข password ที่จะทำการเชื่อมต่อ
 #endif
 
-String apikey = "5T4WXGZFE1PZPS2K"; // แก้ไข api keys thingspeak
+String apikey = "xxxxxxxxxxxxxxxxx"; // แก้ไข api keys thingspeak
 float t, h;
 int wificount = 0;
 const int sleepTimeS = 300; // 300 = 30นาที
 
 WiFiConnector wifi(WIFI_SSID, WIFI_PASSPHRASE);
 
-void init_hardware()  {
-  espert.init();
-  espert.dht.init();
-  espert.oled.init();
+void init_hardware()  { //  ฟังก์ชันเริ่มต้นใช้งานอุปกรณ์
+  espert.init();  //  เรียกใช้งานไลบรารี่ ESPert
+  espert.dht.init();  //  เรียกใช้งานไลบรารี่ DHT
+  espert.oled.init(); //  เรียกใช้งานไลบรารี่ OLED
   delay(2000);
-  Serial.begin(115200);
+  
+  Serial.begin(115200); 
   WiFi.disconnect(true);
   delay(1000);
 }
 
-void init_wifi() {
+void init_wifi() {  //   ฟังก์ชันเริ่มต้นใช้งานไวไฟ
   wifi.init();
-  wifi.on_connected([&](const void* message)  {
+  wifi.on_connected([&](const void* message)  {  // หากมีการเชื่อมต่อไวไฟ จะแสดงเลข IP
     Serial.print("WIFI CONNECTED WITH IP: ");
     Serial.println(WiFi.localIP());
   });
 
-  wifi.on_connecting([&](const void* message) {
+  wifi.on_connecting([&](const void* message) { // เชื่อมต่อไวไฟ
     Serial.print("Connecting to ");
     Serial.println(wifi.get("ssid") + ", " + wifi.get("password"));
     delay(200);
