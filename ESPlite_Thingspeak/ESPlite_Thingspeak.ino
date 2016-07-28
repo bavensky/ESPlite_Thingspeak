@@ -1,60 +1,94 @@
-// Copyright Nat Weerawan 2015-2016
-// Chiang Mai Maker Club
-#include <ESPert.h>
+/******************************************************************************
+  Project  : ESPlite Thingspeak
+  Compiler : Arduino 1.6.7
+  Board    : ESPresso Lite V2
+  Device   : DHT11
+  Dashboard : -
+  Library : DHT-sensor-library, CMMC_Blink
+  Author   : Chiang Mai Maker Club
+*******************************************************************************/
+
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <WiFiConnector.h>
-#include <ESP8266HTTPClient.h>
+#include <ESP8266HTTPClient.h>  // v 1.1.1
+#include "DHT.h"
 
-ESPert espert;
+const char* ssid     = "ESPERT-3020";  // Change your ssid wifi
+const char* password = "espertap";  // Change your password wifi
+String api_key = "5T4WXGZFE1PZPS2K";   //  Change your api key
 
-#ifndef WIFI_SSID
-#define WIFI_SSID       "Your_wifi_SSID"        //  แก้ไข ssid ที่จะทำการเชื่อมต่อ
-#define WIFI_PASSPHRASE "Your_wifi_password"    //  แก้ไข password ที่จะทำการเชื่อมต่อ
-#endif
+#define DHTPIN 12
+#define DHTTYPE DHT22
 
-String apikey = "xxxxxxxxxxxxxxxxx"; // แก้ไข api keys thingspeak
-float t, h;
-int wificount = 0;
-const int sleepTimeS = 300; // 300 = 30นาที
+WiFiClient client;
+DHT dht(DHTPIN, DHTTYPE);
 
-WiFiConnector wifi(WIFI_SSID, WIFI_PASSPHRASE);
+void init_wifi();
+void init_hardware();
+void doHttpGet(float, float);
 
-void init_hardware()  { //  ฟังก์ชันเริ่มต้นใช้งานอุปกรณ์
-  espert.init();  //  เรียกใช้งานไลบรารี่ ESPert
-  espert.dht.init();  //  เรียกใช้งานไลบรารี่ DHT
-  espert.oled.init(); //  เรียกใช้งานไลบรารี่ OLED
-  delay(2000);
-  
-  Serial.begin(115200); 
-  WiFi.disconnect(true);
-  delay(1000);
+void setup() {
+  init_wifi();
+  init_hardware();
+  Serial.println("Init done...");
 }
 
-void init_wifi() {  //   ฟังก์ชันเริ่มต้นใช้งานไวไฟ
-  wifi.init();
-  wifi.on_connected([&](const void* message)  {  // หากมีการเชื่อมต่อไวไฟ จะแสดงเลข IP
-    Serial.print("WIFI CONNECTED WITH IP: ");
-    Serial.println(WiFi.localIP());
-  });
-
-  wifi.on_connecting([&](const void* message) { // เชื่อมต่อไวไฟ
-    Serial.print("Connecting to ");
-    Serial.println(wifi.get("ssid") + ", " + wifi.get("password"));
-    delay(200);
-    if (wificount >= 10) {    // หากยังเชื่อมต่อไวไฟไม่ได้เกิน 10 ครั้ง จะเข้าโหมด sleep 30 นาที
-      espert.oled.clear();
-      ESP.deepSleep(sleepTimeS * 6000000);
-      wificount = 0;
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    // อ่านค่าจากเซ็นเซอร์ DHt22
+    float t = dht.readTemperature();
+    float h = dht.readHumidity();
+    // เช็คว่าสามารถอ่านค่าจากเซ็นเซอร์ DHt22 ได้หรือไม่
+    if (isnan(h) || isnan(t)) {
+      Serial.println("Failed to read from DHT sensor!");
+      delay(500);
+      return;
     }
-  });
+    // ส่งข้อมูลขึ้น Thingspeak แบบ GET
+    doHttpGet(t, h);
+    // แสดงค่าอุณหภูมิ และความชื้นในอากาศทาง Serial
+    Serial.print("Temperature = ");
+    Serial.print(t);
+    Serial.print("\t");
+    Serial.print("Humidity = ");
+    Serial.println(h);
+    delay(5000);  //  delay for gethttp
+
+  } else  {
+    Serial.println("connection lost, reconnect...");
+    WiFi.begin(ssid, password);
+    delay(500);
+  }
 }
 
+/******************* initial loop ***********************************/
+void init_wifi() {
+  Serial.begin(115200);
+  delay(200);
 
-void doHttpGet() {  // ฟังก์ชันสำหรับส่งค่าขึ้น Thingspeak
+  if (WiFi.begin(ssid, password)) {
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+    }
+  }
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void init_hardware() {
+  dht.begin();
+}
+
+void doHttpGet(float t, float h) {
   HTTPClient http;
   Serial.print("[HTTP] begin...\n");
-  http.begin("http://api.thingspeak.com/update?api_key=" + apikey + "&field1=" + String(t) + "&field2=" + String(h)); //HTTP
+
+  // http://api.thingspeak.com/update?api_key=5T4WXGZFE1PZPS2K&field1=0
+  http.begin("http://api.thingspeak.com/update?api_key=" + api_key + "&field1=" + String(t) + "&field2=" + String(h)); //HTTP
+
+  // start connection and send HTTP header
   int httpCode = http.GET();
 
   // httpCode will be negative on error
@@ -71,52 +105,5 @@ void doHttpGet() {  // ฟังก์ชันสำหรับส่งค่
   } else {
     Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
-
   http.end();
 }
-
-void setup()  {
-  init_hardware();
-  init_wifi();
-  wifi.connect();
-}
-
-void loop() {
-  wifi.loop();
-  if (wifi.connected()) {
-    bool isFarenheit = false;
-    t = espert.dht.getTemperature(isFarenheit); // อ่านค่าอุณหภูมิ
-    h = espert.dht.getHumidity(); // อ่านค่าความชื้นในอากาศ
-
-    String dht = "Temperature: " + String(t) + (isFarenheit ?  " F" : " C") + "\n";
-    dht += " Humidity   : " + String(h) + " %\n";
-    espert.oled.clear();
-    espert.oled.println("   Weather Station ");
-    espert.oled.println("");
-    espert.oled.println(dht);
-    espert.oled.println("Chiang Mai Maker Club");
-    espert.oled.update();
-
-    doHttpGet();  //  ส่งค่าขึ้น Thingspeak โดยใช้รูปแบบ GET
-    delay(5000);
-
-  } else {
-    bool isFarenheit = false;
-    t = espert.dht.getTemperature(isFarenheit); // อ่านค่าอุณหภูมิ
-    h = espert.dht.getHumidity(); // อ่านค่าความชื้นในอากาศ
-    if (!isnan(t) && !isnan(h)) {
-      String dht = "Temperature: " + String(t) + (isFarenheit ?  " F" : " C") + "\n";
-      dht += " Humidity   : " + String(h) + " %\n";
-      espert.oled.clear();
-      espert.oled.println("   Weather Station ");
-      espert.oled.println("");
-      espert.oled.println(dht);
-      espert.oled.println("Wifi is not connect !");
-      espert.oled.update();
-      espert.println(dht);
-      delay(5000);
-      wificount += 1; // นับเวลา หากยังเชื่อมต่อไวไฟไม่ได้เกิน 10 ครั้งจะเข้า sleep mode 30 นาที
-    }
-  }
-}
-
