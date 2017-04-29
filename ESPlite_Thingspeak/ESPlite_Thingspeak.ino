@@ -1,28 +1,31 @@
 /******************************************************************************
   Project  : ESPlite Thingspeak
   Compiler : Arduino 1.6.7
-  Board    : ESPresso Lite V2
-  Device   : DHT11
-  Dashboard : -
-  Library : DHT-sensor-library, CMMC_Blink
+  Board    : ESPresso Lite V1
+  Device   : DHT22
   Author   : Chiang Mai Maker Club
 *******************************************************************************/
 
+
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>  // v 1.1.1
+#include <CMMC_Manager.h>
+//#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
 #include "DHT.h"
 
-const char* ssid     = "ESPERT-3020";  // Change your ssid wifi
-const char* password = "espertap";  // Change your password wifi
-String api_key = "5T4WXGZFE1PZPS2K";   //  Change your api key
+#define BUTTON_INPUT_PIN 16
+CMMC_Manager manager(BUTTON_INPUT_PIN, LED_BUILTIN);
+
+//const char* ssid     = "ESPERT-3020";  // Change your ssid wifi
+//const char* password = "espertap";  // Change your password wifi
+String api_key = "SGUH5EDVHXIALPHO";   //  Change your api key
 
 #define DHTPIN 12
 #define DHTTYPE DHT22
 
 WiFiClient client;
 DHT dht(DHTPIN, DHTTYPE);
-
+uint32_t pevmillis = 0;
 void init_wifi();
 void init_hardware();
 void doHttpGet(float, float);
@@ -35,28 +38,30 @@ void setup() {
 
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
-    // อ่านค่าจากเซ็นเซอร์ DHt22
+    uint32_t conMillis = millis();
+
     float t = dht.readTemperature();
     float h = dht.readHumidity();
-    // เช็คว่าสามารถอ่านค่าจากเซ็นเซอร์ DHt22 ได้หรือไม่
+
     if (isnan(h) || isnan(t)) {
       Serial.println("Failed to read from DHT sensor!");
       delay(500);
       return;
     }
-    // ส่งข้อมูลขึ้น Thingspeak แบบ GET
-    doHttpGet(t, h);
-    // แสดงค่าอุณหภูมิ และความชื้นในอากาศทาง Serial
+
+    if (conMillis - pevmillis >= 15000)  {
+      doHttpGet(t, h);
+      pevmillis = conMillis;
+    }
+
     Serial.print("Temperature = ");
     Serial.print(t);
     Serial.print("\t");
     Serial.print("Humidity = ");
     Serial.println(h);
-    delay(5000);  //  delay for gethttp
-
+    delay(5000);
   } else  {
     Serial.println("connection lost, reconnect...");
-    WiFi.begin(ssid, password);
     delay(500);
   }
 }
@@ -65,16 +70,18 @@ void loop() {
 void init_wifi() {
   Serial.begin(115200);
   delay(200);
-
-  if (WiFi.begin(ssid, password)) {
-    while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      Serial.print(".");
-    }
-  }
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
+  pinMode(BUTTON_INPUT_PIN, INPUT_PULLUP);
+  pinMode(LED_BUILTIN, OUTPUT);
+  manager.start();
+  //  if (WiFi.begin(ssid, password)) {
+  //    while (WiFi.status() != WL_CONNECTED) {
+  //      delay(500);
+  //      Serial.print(".");
+  //    }
+  //  }
+  //  Serial.println("WiFi connected");
+  //  Serial.println("IP address: ");
+  //  Serial.println(WiFi.localIP());
 }
 
 void init_hardware() {
